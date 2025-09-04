@@ -1,120 +1,114 @@
 import { InjectGraphQLClient } from '@golevelup/nestjs-graphql-request';
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { GraphQLClient } from 'graphql-request';
 import { SEARCH_CUSTOMER_REF, WORK_ORDER } from './graphql/querys';
 import { INSERT_DELIVERY_ORDER, UPDATE_WORK_ORDER } from './graphql/mutation';
 import { WorkOrder } from './Interface/workOrder.interface';
-import * as fs from 'fs';
+import { DeliveryOrder } from './Interface/deliveryOrder.interface';
 
 @Injectable()
 export class AppService {
   constructor(@InjectGraphQLClient() private readonly client: GraphQLClient) {}
 
   async startApp() {
-    const updatedOrdersCsv: string[] = [];
-
     try {
       const response = await this.client.request<WorkOrder>(WORK_ORDER);
 
-      if (!response.work_orders || response.work_orders.length === 0) {
-        return { status: 'no_work_orders', message: 'No work orders found' };
+      if (!response || response.work_orders?.length === 0) {
+        return new NotFoundException('No work orders found');
       }
 
-      updatedOrdersCsv.push(
-        'work_order_id,customer_ref,delivery_order_id,was_created,error_message',
-      );
+      const workOrder = response.work_orders[0];
+      const customerRef = workOrder?.customer_ref;
 
-      for (const order of response.work_orders) {
-        const customerRef = order?.customer_ref;
-        if (!customerRef) continue;
+      if (!customerRef) {
+        return new NotFoundException('No customer ref found');
+      }
 
-        let deliveryOrderId = '';
-        let wasCreated = false;
-        let errorMsg = '';
+      try {
+        const check: { delivery_orders: Array<{ id: string }> } =
+          await this.client.request(SEARCH_CUSTOMER_REF, { ref: customerRef });
 
-        try {
-          const check: { delivery_orders: Array<{ id: string }> } =
-            await this.client.request(SEARCH_CUSTOMER_REF, {
-              ref: customerRef,
-            });
-
-          if (check.delivery_orders.length > 0) {
-            deliveryOrderId = check.delivery_orders[0].id;
-            console.log(
-              `✅ DeliveryOrder already exists: ${deliveryOrderId} for ${customerRef} (WO: ${order.id})`,
-            );
-          } else {
-            const rawData = {
-              type_id: order?.type_id?.id ?? null,
-              to_zone_id: order?.to_zone_id ?? null,
-              customer_id: order?.customer_id ?? null,
-              from_zone_id: order?.from_zone_id ?? null,
-            };
-
-            const insertRes = await this.client.request(INSERT_DELIVERY_ORDER, {
-              input: [
-                {
-                  customer_ref: customerRef,
-                  bill_of_lading: order?.bill_of_lading ?? null,
-                  type_id: order?.type_id?.id ?? null,
-                  status_id: '7feb6604-64a8-40e6-b60b-e3cc4788b229',
-                  type_code_name: order?.type_id?.code_name ?? null,
-                  to_zone_id: order?.to_zone_id ?? null,
-                  from_zone_id: order?.from_zone_id ?? null,
-                  customer_id: order?.customer_id ?? null,
-                  arrival_date: order?.arrival_date ?? null,
-                  inbond_via_id: order?.inbond_via_id ?? null,
-                  updated_by: order?.updated_by ?? null,
-                  move_type_code_name:
-                    order?.move_type_code_name?.code_name ?? null,
-                  vessel_name: order?.vessel_name ?? null,
-                  raw: rawData,
-                },
-              ],
-            });
-
-            const insertDeliveryOrders = (
-              insertRes as {
-                insert_delivery_orders: { returning: Array<{ id: string }> };
-              }
-            ).insert_delivery_orders;
-            deliveryOrderId = insertDeliveryOrders.returning[0].id;
-
-            wasCreated = true;
-            console.log(
-              `🆕 DeliveryOrder created: ${deliveryOrderId} for ${customerRef} (WO: ${order.id})`,
-            );
-          }
-
-          await this.client.request(UPDATE_WORK_ORDER, {
-            id: order.id,
-            deliveryId: deliveryOrderId,
-          });
-
-          console.log(
-            `🔄 Work Order updated: ${order.id} with DO ${deliveryOrderId}`,
-          );
-        } catch (err) {
-          errorMsg = (err as Error).message || 'unknown_error';
-          console.error(
-            `❌ Error en WO ${order.id} (${customerRef}): ${errorMsg}`,
-          );
+        if (check.delivery_orders.length > 0) {
+          return new BadRequestException('Delivery order already exists');
         }
 
-        // Agregar resultado al CSV
-        updatedOrdersCsv.push(
-          `${order.id},${customerRef},${deliveryOrderId},${wasCreated},${errorMsg}`,
+        const delivery_order_content = {
+          customer_ref: customerRef,
+          description: 'DELIVERY ORDER CONTENT CREATE FROM STREET RETURN',
+          weight: workOrder.weight ?? null,
+          container: workOrder.container ?? null,
+          container_size: workOrder.equipment?.equipment_type?.model ?? null,
+          te: workOrder.te ?? null,
+          seal: workOrder.seal ?? null,
+          te_expiration: workOrder.te_expiration ?? null,
+          load_type_id: workOrder.load_type_id ?? null,
+          unit_type_id: workOrder.unit_type_id ?? null,
+          equipment_type_id: workOrder.equipment?.equipment_type?.id ?? null,
+          equipment_id: workOrder.equipment?.id ?? null,
+          status_id: 'f13b8103-17c6-43e0-9b91-f488409358c0',
+        };
+
+        const rawData = {
+          type_id: workOrder.type_id?.id ?? null,
+          to_zone_id: workOrder.to_zone_id ?? null,
+          customer_id: workOrder.customer_id ?? null,
+          from_zone_id: workOrder.from_zone_id ?? null,
+        };
+
+        const input: DeliveryOrder = {
+          customer_ref: customerRef,
+          consignee_id: workOrder.consignee_id ?? null,
+          bill_of_lading: workOrder.bill_of_lading ?? null,
+          type_id: workOrder.type_id?.id ?? null,
+          status_id: '7feb6604-64a8-40e6-b60b-e3cc4788b229',
+          type_code_name: workOrder.type_id?.code_name ?? null,
+          to_zone_id: workOrder.to_zone_id ?? null,
+          from_zone_id: workOrder.from_zone_id ?? null,
+          customer_id: workOrder.customer_id ?? null,
+          arrival_date: workOrder.arrival_date ?? null,
+          inbond_via_id: workOrder.inbond_via_id ?? null,
+          updated_by: workOrder.updated_by ?? null,
+          move_type_code_name: workOrder.move_type_code_name?.code_name ?? null,
+          vessel_name: workOrder.vessel_name ?? null,
+          raw: rawData,
+          date: workOrder.do_received ?? null,
+          carrier_id: workOrder.carrier_id ?? null,
+          delivery_order_content: { data: delivery_order_content },
+        };
+
+        const insertRes = await this.client.request<{
+          insert_delivery_orders: {
+            returning: Array<{ id: string }>;
+          };
+        }>(INSERT_DELIVERY_ORDER, { input: [input] });
+
+        const responses = await this.client.request(UPDATE_WORK_ORDER, {
+          id: workOrder.id,
+          deliveryId: insertRes.insert_delivery_orders.returning[0].id,
+        });
+
+        console.log(responses);
+
+        return { status: responses };
+      } catch (err: unknown) {
+        let errorMsg = 'unknown_error';
+        if (err instanceof Error) errorMsg = err.message;
+        console.error(
+          `❌ Error en WO ${workOrder.id} (${customerRef}): ${errorMsg}`,
         );
       }
 
-      const filePath = 'updated_work_orders.csv';
-      fs.writeFileSync(filePath, updatedOrdersCsv.join('\n'), 'utf8');
-      console.log(`📄 CSV generado: ${filePath}`);
-
-      return { status: 'done', file: filePath };
-    } catch (error) {
+      return { status: 'done' };
+    } catch (error: unknown) {
+      let errorMsg = 'unknown_error';
+      if (error instanceof Error) errorMsg = error.message;
       console.error(error);
-      throw new BadRequestException(`Error general: ${error}`);
+      throw new BadRequestException(`Error general: ${errorMsg}`);
     }
   }
 }

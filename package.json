@@ -2,7 +2,7 @@
   "name": "generate-delivery-order",
   "version": "0.0.1",
   "description": "",
-  "author": "",
+  "author": "alexiscode.dev",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
@@ -25,6 +25,7 @@
     "@nestjs/core": "^11.1.4",
     "@nestjs/platform-express": "^11.0.1",
     "dotenv": "^17.2.0",
+    "eslint-config-airbnb": "^19.0.4",
     "graphql": "^16.11.0",
     "graphql-request": "^6.1.0",
     "reflect-metadata": "^0.2.2",

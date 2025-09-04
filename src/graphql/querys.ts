@@ -3,12 +3,7 @@ import { gql } from 'graphql-request';
 export const WORK_ORDER = gql`
   query WorkOrder {
     work_orders(
-      where: {
-        delivery_order_id: { _is_null: true }
-        created_at: { _gte: "2025-01-01", _lte: "2025-07-30" }
-        status: { code_name: { _nin: ["BILLED", "CANCELED"] } }
-        #id: { _eq: "cd6cdb5f-b79c-44b6-86ba-a9955193e572" }
-      }
+      where: { id: { _eq: "3566209a-cac7-47f7-93b1-93a155753ba7" } }
     ) {
       #DRIVE MOVE
       id
@@ -40,6 +35,9 @@ export const WORK_ORDER = gql`
       seal
       te_expiration
       equipment {
+        id # equipment_id
+        customer_id # delivery_order_content.customer_id
+        code # delivery_order_content.container
         equipment_type {
           id # equipment_type_id
           model # container_size
